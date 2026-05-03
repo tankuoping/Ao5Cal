@@ -1,28 +1,13 @@
-:root {
-  --bg: #0e1a14;
-  --surf: #162010;
-  --surf2: #1c2a18;
-  --acc: #4ade80;
-  --gold: #fbbf24;
-  --muted: #4b7a5e;
-  --text: #d4f0df;
-  --text2: #7aad8e;
-  --bdr: rgba(74, 222, 128, 0.15);
-  --danger: #f87171;
-}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: 'DM Mono', monospace;
-  background: var(--bg);
-  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  background: #e0f2f1;
   min-height: 100vh;
 }
 
 input[type=number]::-webkit-inner-spin-button,
-input[type=number]::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type=number] { -moz-appearance: textfield; }

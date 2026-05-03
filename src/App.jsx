@@ -1,194 +1,346 @@
-import { useState, useCallback } from 'react'
-import styles from './App.module.css'
+import { useState } from 'react'
+
+// ── Formatting ───────────────────────────────────────────────────────────────
+
+function fmtCs(cs) {
+  if (cs === null) return '—'
+  if (cs === Infinity) return 'DNF'
+  const rounded = Math.round(cs)
+  if (rounded < 6000) {
+    return (rounded / 100).toFixed(2) + 's'
+  } else {
+    const mins = Math.floor(rounded / 6000)
+    const secs = Math.floor((rounded % 6000) / 100)
+    const cents = rounded % 100
+    return `${mins}:${String(secs).padStart(2, '0')}.${String(cents).padStart(2, '0')}`
+  }
+}
+
+// ── Input parsing ────────────────────────────────────────────────────────────
+
+function parseInput(raw) {
+  const s = raw.trim()
+  if (s === '') return { value: null, isDnf: false, warning: null }
+  if (s.toUpperCase().startsWith('D')) return { value: Infinity, isDnf: true, warning: null }
+  const n = parseFloat(s)
+  if (isNaN(n) || n <= 0) return { value: null, isDnf: false, warning: null }
+  if (n >= 6000 && n <= 9999) {
+    const under = Math.round(n - (n - 5999))
+    const over = 10000 + Math.round(n - 6000)
+    return { value: null, isDnf: false, warning: `Invalid range — enter 5999 or below, or 10000 or above. Did you mean ${over}?` }
+  }
+  return { value: n, isDnf: false, warning: null }
+}
 
 // ── Calculation helpers ──────────────────────────────────────────────────────
 
+function countDnf(vals) {
+  return vals.filter(v => v === Infinity).length
+}
+
+function timedOnly(vals) {
+  return vals.filter(v => v !== null && v !== Infinity).sort((a, b) => a - b)
+}
+
+// Ao5: drop best and worst, average middle 3. 2+ DNFs = DNF
 function calcAo5(vals) {
-  const pos = vals.filter(v => v !== null)
-  if (pos.length < 5) return null
-  const s = [...pos].sort((a, b) => a - b)
-  return (s[1] + s[2] + s[3]) / 3
+  const filled = vals.filter(v => v !== null)
+  if (filled.length < 5) return null
+  if (countDnf(vals) >= 2) return Infinity
+  const sorted = [...filled].sort((a, b) => a - b)
+  return (sorted[1] + sorted[2] + sorted[3]) / 3
 }
 
+// WPA: worst case = solve 5 is DNF
 function calcWPA(vals) {
-  const pos = vals.filter(v => v !== null)
-  if (pos.length !== 4) return null
-  const s = [...pos].sort((a, b) => a - b)
-  // Worst possible: 5th is DNF/very slow → dropped as worst, avg top 3 of remaining 4
-  return (s[1] + s[2] + s[3]) / 3
+  const filled = vals.filter(v => v !== null)
+  if (filled.length !== 4) return null
+  return calcAo5([...filled, Infinity])
 }
 
+// BPA: best case = solve 5 is as fast as or faster than current best timed
+// → solve 5 dropped as best, DNF (if any) dropped as worst
+// → avg of 2nd, 3rd, 4th best timed of the 4 known solves
 function calcBPA(vals) {
-  const pos = vals.filter(v => v !== null)
-  if (pos.length !== 4) return null
-  const s = [...pos].sort((a, b) => a - b)
-  // Best possible: 5th is perfect → dropped as best, drop worst of 4, avg remaining 3
-  return (s[0] + s[1] + s[2]) / 3
+  const filled = vals.filter(v => v !== null)
+  if (filled.length !== 4) return null
+  const timed = timedOnly(filled)
+  if (timed.length < 3) return Infinity
+  return (timed[0] + timed[1] + timed[2]) / 3
 }
 
+// Min required: drop DNF/worst, drop best timed, X in middle
+// avg(X + timed[1] + timed[2]) / 3 <= target → X <= 3*target - timed[1] - timed[2]
 function calcMinReq(vals, target) {
   if (target === null) return { val: null, msg: '' }
-  const pos = vals.filter(v => v !== null)
-  if (pos.length !== 4) return { val: null, msg: pos.length === 3 ? 'Enter solve 4 first' : '' }
+  const filled = vals.filter(v => v !== null)
+  if (filled.length !== 4) return { val: null, msg: '' }
 
-  const s = [...pos].sort((a, b) => a - b)
-  const wpa = calcWPA(vals)
   const bpa = calcBPA(vals)
+  const wpa = calcWPA(vals)
 
-  if (bpa !== null && bpa <= target)
-    return { val: 'Already guaranteed', msg: `BPA ${(bpa / 100).toFixed(2)}s beats target`, guaranteed: true }
-  if (wpa !== null && wpa <= target)
-    return { val: 'Any time works', msg: `Even worst-case (WPA ${(wpa / 100).toFixed(2)}s) beats target`, guaranteed: true }
+  if (bpa !== Infinity && bpa !== null && bpa <= target)
+    return { val: 'guaranteed', msg: `BPA ${fmtCs(Math.round(bpa))} already beats target` }
+  if (wpa !== Infinity && wpa !== null && wpa <= target)
+    return { val: 'anytime', msg: `Even worst case (WPA ${fmtCs(Math.round(wpa))}) beats target` }
 
-  // Find x such that Ao5(s0,s1,s2,s3,x) <= target
-  // When s[0] < x <= s[3]: drop s[0] and s[3], ao5 = (x + s[1] + s[2]) / 3
-  const needB = 3 * target - s[1] - s[2]
-  if (needB > 0 && needB <= s[3])
-    return { val: needB, msg: `≤ ${(needB / 100).toFixed(2)}s on solve 5` }
+  const timed = timedOnly(filled)
+  if (timed.length < 2) return { val: 'IMPOSSIBLE', msg: '' }
 
-  return { val: 'IMPOSSIBLE', msg: 'Even a perfect solve cannot save it' }
+  // X in middle: drop timed[0] as best (DNF already worst), avg(X + timed[1] + timed[2]) <= target
+  const need = Math.round(3 * target - timed[1] - timed[2])
+  if (need > 0) return { val: need, msg: '' }
+
+  return { val: 'IMPOSSIBLE', msg: '' }
 }
 
-function fmt(cs) {
-  return cs === null ? '—' : (cs / 100).toFixed(2) + 's'
+// ── Helpers for tagging ──────────────────────────────────────────────────────
+
+function droppedIndices(vals) {
+  const filled = vals.map((v, i) => v !== null ? { v, i } : null).filter(Boolean)
+  if (filled.length < 5) return { bestIdx: -1, worstIdx: -1 }
+  const sorted = [...filled].sort((a, b) => a.v - b.v)
+  return { bestIdx: sorted[0].i, worstIdx: sorted[sorted.length - 1].i }
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
+function bestTimedIndex(vals) {
+  const timed = vals.map((v, i) => (v !== null && v !== Infinity) ? { v, i } : null).filter(Boolean)
+  if (timed.length === 0) return -1
+  return timed.sort((a, b) => a.v - b.v)[0].i
+}
+
+// ── Styles ───────────────────────────────────────────────────────────────────
+
+const inputStyle = {
+  background: '#ffffff',
+  border: '1.5px solid #80cbc4',
+  borderRadius: '8px',
+  padding: '8px 12px',
+  fontFamily: "'Inter', sans-serif",
+  fontSize: '13px',
+  color: '#222',
+  width: '100%',
+  outline: 'none',
+  colorScheme: 'light',
+  boxSizing: 'border-box',
+}
+
+const labelStyle = {
+  fontSize: '10px',
+  fontWeight: 700,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase',
+  color: '#004d40',
+  marginBottom: '6px',
+}
+
+const warnStyle = {
+  fontSize: '11px',
+  color: '#b71c1c',
+  background: '#ffebee',
+  border: '1px solid #ef9a9a',
+  borderRadius: '6px',
+  padding: '4px 8px',
+  marginTop: '4px',
+}
+
+const hintStyle = {
+  fontSize: '11px',
+  color: '#00695c',
+  marginTop: '3px',
+  paddingLeft: '4px',
+}
+
+// ── Sub-components ───────────────────────────────────────────────────────────
+
+function Tag({ color, bg, children }) {
+  return (
+    <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase', flexShrink: 0, background: bg, color }}>
+      {children}
+    </span>
+  )
+}
+
+function ResultBox({ label, sublabel, children }) {
+  return (
+    <div style={{ background: '#b2dfdb', border: '1.5px solid #80cbc4', borderRadius: '10px', padding: '10px', textAlign: 'center' }}>
+      <div style={{ fontSize: '10px', color: '#004d40', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '4px' }}>
+        {label} <span style={{ fontSize: '9px', opacity: 0.7 }}>{sublabel}</span>
+      </div>
+      <div style={{ fontSize: '18px', fontWeight: 700, color: '#00695c' }}>{children}</div>
+    </div>
+  )
+}
+
+// ── Main component ───────────────────────────────────────────────────────────
+
+const PLACEHOLDER = '"178" for 1.78s, "10067" for 1:00.67 or "D" for DNF'
 
 export default function App() {
   const [attempts, setAttempts] = useState(['', '', '', '', ''])
-  const [targetStr, setTargetStr] = useState('')
+  const [targetRaw, setTargetRaw] = useState('')
 
-  const vals = attempts.map(a => {
-    const v = parseFloat(a)
-    return !isNaN(v) && v > 0 ? v : null
-  })
-  const target = (() => { const v = parseFloat(targetStr); return !isNaN(v) && v > 0 ? v : null })()
-  const pos = vals.filter(v => v !== null)
+  const parsed = attempts.map(a => parseInput(a))
+  const vals = parsed.map(p => p.value)
+
+  const targetParsed = parseInput(targetRaw)
+  const target = (targetParsed.value === null || targetParsed.value === Infinity) ? null : targetParsed.value
+
+  const filled = vals.filter(v => v !== null)
+  const progress = filled.length / 5
 
   const ao5 = calcAo5(vals)
-  const wpa = calcWPA(vals)
-  const bpa = calcBPA(vals)
+  const wpa = filled.length === 4 ? calcWPA(vals) : null
+  const bpa = filled.length === 4 ? calcBPA(vals) : null
   const minr = calcMinReq(vals, target)
 
-  // Which solves get dropped in Ao5
-  const droppedIdxs = (() => {
-    if (ao5 === null) return []
-    const posI = vals.map((v, i) => v !== null ? { v, i } : null).filter(Boolean)
-    const sorted = [...posI].sort((a, b) => a.v - b.v)
-    return [sorted[0].i, sorted[sorted.length - 1].i]
-  })()
+  const { bestIdx, worstIdx } = filled.length === 5 ? droppedIndices(vals) : { bestIdx: -1, worstIdx: -1 }
+  const bestTimed4 = filled.length === 4 ? bestTimedIndex(vals) : -1
 
-  const updateAttempt = useCallback((i, val) => {
+  const ao5Beats = ao5 !== null && ao5 !== Infinity && target !== null && ao5 <= target
+  const ao5IsDnf = ao5 === Infinity
+
+  const updateAttempt = (i, val) => {
     setAttempts(prev => { const next = [...prev]; next[i] = val; return next })
-  }, [])
+  }
 
   const clearAll = () => {
     setAttempts(['', '', '', '', ''])
-    setTargetStr('')
+    setTargetRaw('')
   }
 
   return (
-    <div className={styles.wrap}>
-      <header className={styles.header}>
-        <h1>Ao5 Calculator</h1>
-        <p>WCA LIVE · SPECTATOR MODE</p>
-      </header>
+    <div style={{ fontFamily: "'Inter', sans-serif", background: '#e0f2f1', minHeight: '100vh', padding: '0 0 40px' }}>
 
-      {/* Target input */}
-      <div className={styles.card}>
-        <div className={styles.cardLabel}>NR / PR / Target (centiseconds)</div>
-        <div className={styles.nrRow}>
-          <label>Target</label>
-          <input
-            type="number"
-            value={targetStr}
-            onChange={e => setTargetStr(e.target.value)}
-            placeholder="e.g. 224"
-            min="0"
-          />
+      {/* Header */}
+      <div style={{ background: '#00695c', padding: '14px 20px', marginBottom: '16px' }}>
+        <div style={{ color: '#fff', fontSize: '18px', fontWeight: 700 }}>Ao5 Calculator</div>
+        <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '10px', letterSpacing: '0.1em', marginTop: '2px' }}>WCA LIVE · SPECTATOR MODE</div>
+      </div>
+
+      <div style={{ maxWidth: '460px', margin: '0 auto', padding: '0 16px' }}>
+
+        {/* Target */}
+        <div style={{ marginBottom: '8px' }}>
+          <div style={labelStyle}>NR / PR / Target</div>
+          <input type="text" value={targetRaw} onChange={e => setTargetRaw(e.target.value)} placeholder={PLACEHOLDER} style={inputStyle} />
+          {targetParsed.warning && <div style={warnStyle}>{targetParsed.warning}</div>}
+          {target && <div style={hintStyle}>= {fmtCs(target)}</div>}
         </div>
-      </div>
 
-      {/* Progress bar */}
-      <div className={styles.progressBar}>
-        <div className={styles.progressFill} style={{ width: `${pos.length / 5 * 100}%` }} />
-      </div>
+        {/* Progress bar */}
+        <div style={{ height: '3px', background: '#80cbc4', borderRadius: '2px', margin: '10px 0', overflow: 'hidden' }}>
+          <div style={{ height: '100%', background: '#00695c', borderRadius: '2px', width: `${progress * 100}%`, transition: 'width 0.3s' }} />
+        </div>
 
-      {/* Attempts */}
-      <div className={styles.card}>
-        <div className={styles.cardLabel}>Attempts (centiseconds)</div>
-        <div className={styles.attemptsGrid}>
-          {attempts.map((val, i) => {
-            const isDropped = droppedIdxs.includes(i)
-            const isPending = i >= pos.length && ao5 === null
-            const isBest = ao5 !== null && droppedIdxs[0] === i
-            const isWorst = ao5 !== null && droppedIdxs[1] === i
+        {/* Attempts */}
+        <div style={{ marginBottom: '12px' }}>
+          <div style={labelStyle}>Attempts</div>
+          {attempts.map((raw, i) => {
+            const p = parsed[i]
+            const isDnf = p.isDnf
+            const hasDnfInFilled = countDnf(vals.filter(v => v !== null)) > 0
+
+            // Tags for 5 solves
+            const isBest5 = bestIdx === i && !isDnf
+            const isWorst5 = worstIdx === i && !isDnf
+
+            // Tags for 4 solves: only show "best" on best timed; DNF row just shows DNF tag (no "worst")
+            const isBest4 = bestTimed4 === i && filled.length === 4 && !isDnf
+
+            const isPending = p.value === null && !isDnf && i >= filled.length
+
+            const rowBg = isDnf ? '#ffcdd2' : '#b2dfdb'
+            const rowBorder = isDnf ? '#ef9a9a' : (isWorst5 ? '#ef9a9a' : '#80cbc4')
+            const numColor = isDnf ? '#c62828' : '#00796b'
+
             return (
-              <div
-                key={i}
-                className={[
-                  styles.attemptRow,
-                  isDropped ? styles.dropped : '',
-                  isPending && i > pos.length ? styles.pending : '',
-                ].join(' ')}
-              >
-                <span className={styles.attemptNum}>{i + 1}</span>
-                <input
-                  type="number"
-                  value={val}
-                  onChange={e => updateAttempt(i, e.target.value)}
-                  placeholder="—"
-                  min="0"
-                />
-                {isBest && <span className={`${styles.attemptTag} ${styles.tagBest}`}>best</span>}
-                {isWorst && <span className={`${styles.attemptTag} ${styles.tagWorst}`}>worst</span>}
+              <div key={i} style={{ marginBottom: '5px' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  background: rowBg, border: `1.5px solid ${rowBorder}`,
+                  borderRadius: '8px', padding: '5px 10px',
+                  opacity: isPending ? 0.4 : 1, transition: 'all 0.2s'
+                }}>
+                  <span style={{ fontSize: '10px', color: numColor, width: '14px', flexShrink: 0, fontWeight: 600 }}>{i + 1}</span>
+                  <input
+                    type="text"
+                    value={raw}
+                    onChange={e => updateAttempt(i, e.target.value)}
+                    placeholder={isPending ? '—' : PLACEHOLDER}
+                    style={{ ...inputStyle, margin: 0, flex: 1, fontSize: isDnf ? '13px' : '14px', fontWeight: isDnf ? 700 : 400, color: isDnf ? '#c62828' : '#222', padding: '4px 8px', minWidth: 0 }}
+                  />
+                  {isBest5 && <Tag color="#00695c" bg="#e0f2f1">best</Tag>}
+                  {isWorst5 && <Tag color="#c62828" bg="#ffebee">worst</Tag>}
+                  {isBest4 && <Tag color="#00695c" bg="#e0f2f1">best</Tag>}
+                  {isDnf && <Tag color="#fff" bg="#c62828">DNF</Tag>}
+                </div>
+                {p.warning && <div style={warnStyle}>{p.warning}</div>}
+                {p.value && p.value !== Infinity && !p.warning && (
+                  <div style={hintStyle}>= {fmtCs(p.value)}</div>
+                )}
               </div>
             )
           })}
         </div>
-      </div>
 
-      {/* Results */}
-      <div className={styles.results}>
-        <div className={`${styles.resultBox} ${styles.main}`}>
-          <div className={styles.rLabel}>Ao5</div>
-          <div className={[styles.rVal, styles.rValLarge, ao5 === null ? styles.muted : target && ao5 <= target ? styles.nrBeat : ''].join(' ')}>
-            {ao5 !== null ? fmt(ao5) : '—'}
+        {/* Results */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+          <div style={{ gridColumn: '1/-1', background: ao5IsDnf ? '#b71c1c' : '#00695c', borderRadius: '10px', padding: '12px 14px' }}>
+            <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: '10px', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '4px' }}>Ao5</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ color: '#fff', fontSize: '28px', fontWeight: 700, lineHeight: 1 }}>
+                {ao5 === null ? '—' : ao5IsDnf ? 'DNF' : fmtCs(ao5)}
+              </div>
+              {ao5Beats && <div style={{ background: '#43a047', color: '#fff', fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '5px', letterSpacing: '0.05em' }}>TARGET</div>}
+            </div>
           </div>
+
+          <ResultBox label="WPA" sublabel="worst possible">
+            {wpa === null ? '—' : wpa === Infinity ? <span style={{ color: '#c62828', fontSize: '16px', fontWeight: 700 }}>DNF</span> : fmtCs(wpa)}
+          </ResultBox>
+
+          <ResultBox label="BPA" sublabel="best possible">
+            {bpa === null ? '—' : bpa === Infinity ? <span style={{ color: '#c62828', fontSize: '16px', fontWeight: 700 }}>DNF</span> : fmtCs(bpa)}
+          </ResultBox>
         </div>
-        <div className={styles.resultBox}>
-          <div className={styles.rLabel}>WPA <span className={styles.sub}>worst possible</span></div>
-          <div className={[styles.rVal, wpa === null ? styles.muted : ''].join(' ')}>{fmt(wpa)}</div>
+
+        {/* Min required */}
+        <div style={{
+          background: minr.val === 'IMPOSSIBLE' ? '#ffebee' : '#b2dfdb',
+          border: `1.5px solid ${minr.val === 'IMPOSSIBLE' ? '#ef9a9a' : '#80cbc4'}`,
+          borderRadius: '10px', padding: '10px 14px', marginBottom: '12px'
+        }}>
+          <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: minr.val === 'IMPOSSIBLE' ? '#b71c1c' : '#004d40', marginBottom: '4px' }}>
+            Minimum required for target
+          </div>
+          <div style={{ fontSize: '20px', fontWeight: 700, color: minr.val === 'IMPOSSIBLE' ? '#b71c1c' : minr.val === 'guaranteed' || minr.val === 'anytime' ? '#00695c' : '#004d40' }}>
+            {minr.val === null && '—'}
+            {minr.val === 'IMPOSSIBLE' && 'IMPOSSIBLE'}
+            {minr.val === 'guaranteed' && 'Already guaranteed'}
+            {minr.val === 'anytime' && 'Any time works'}
+            {typeof minr.val === 'number' && `${fmtCs(minr.val)} or better`}
+          </div>
+          {minr.msg && <div style={{ fontSize: '11px', color: '#00695c', marginTop: '2px' }}>{minr.msg}</div>}
         </div>
-        <div className={styles.resultBox}>
-          <div className={styles.rLabel}>BPA <span className={styles.sub}>best possible</span></div>
-          <div className={[styles.rVal, bpa === null ? styles.muted : ''].join(' ')}>{fmt(bpa)}</div>
+
+        {/* Clear */}
+        <button onClick={clearAll} style={{
+          width: '100%', padding: '12px', backgroundColor: '#ff7043', border: 'none',
+          borderRadius: '8px', color: '#fff', fontFamily: "'Inter', sans-serif",
+          fontSize: '13px', fontWeight: 600, cursor: 'pointer', letterSpacing: '0.03em',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+          </svg>
+          Clear All Values
+        </button>
+
+        <div style={{ textAlign: 'center', fontSize: '10px', color: '#00796b', marginTop: '16px', letterSpacing: '0.05em' }}>
+          Ao5 Calculator · by tankuoping@gmail.com
         </div>
       </div>
-
-      {/* Min required */}
-      <div className={styles.minReqBox}>
-        <div className={styles.rLabel}>Min. required for Target (next solve)</div>
-        <div className={styles.minReqInner}>
-          {minr.val === null && (
-            <><div className={`${styles.rVal} ${styles.muted}`}>—</div><div className={styles.rSub}>{minr.msg}</div></>
-          )}
-          {minr.guaranteed && (
-            <><div className={`${styles.rVal} ${styles.guaranteed}`}>{minr.val}</div><div className={styles.rSub}>{minr.msg}</div></>
-          )}
-          {minr.val === 'IMPOSSIBLE' && (
-            <><div className={`${styles.rVal} ${styles.impossible}`}>IMPOSSIBLE</div><div className={styles.rSub}>{minr.msg}</div></>
-          )}
-          {typeof minr.val === 'number' && (
-            <><div className={`${styles.rVal} ${styles.gold}`}>{fmt(minr.val)}</div><div className={styles.rSub}>{minr.msg}</div></>
-          )}
-        </div>
-      </div>
-
-      <button className={styles.btnClear} onClick={clearAll}>Clear All Values</button>
-
-      <footer className={styles.footer}>Ao5 Calculator · by tankuoping@gmail.com</footer>
     </div>
   )
 }
