@@ -93,7 +93,7 @@ function calcMinReq(vals, target) {
   const wpa = calcWPA(vals)
 
   // "Any time works" = even DNF on solve 5 (WPA) still beats target
-  if (wpa !== Infinity && wpa !== null && wpa <= target)
+  if (wpa !== Infinity && wpa !== null && Math.round(wpa) <= target)
     return { val: 'anytime', msg: `Even a DNF on solve 5 beats target` }
 
   // "Already guaranteed" = even if solve 5 is the new worst (just above current worst),
@@ -106,12 +106,12 @@ function calcMinReq(vals, target) {
   // → avg(timed[0]+timed[1]+timed[3])/3 which could be > BPA. So need to check this too.
   const dnfs = countDnf(filled)
   const timed = timedOnly(filled)
-  if (bpa !== Infinity && bpa !== null && bpa <= target) {
+  if (bpa !== Infinity && bpa !== null && Math.round(bpa) <= target) {
     // Check worst case within "guaranteed": solve 5 = timed[3] (tied worst)
     // Sort: timed[0], timed[1], timed[2], timed[3], timed[3] → drop timed[0], drop one timed[3]
     // Ao5 = (timed[1] + timed[2] + timed[3]) / 3
     const worstCase = (timed[1] + timed[2] + timed[3]) / 3
-    if (worstCase <= target)
+    if (Math.round(worstCase) <= target)
       return { val: 'guaranteed', msg: `Target met regardless of solve 5` }
   }
 
@@ -232,7 +232,7 @@ export default function App() {
   const { bestIdx, worstIdx } = filled.length === 5 ? droppedIndices(vals) : { bestIdx: -1, worstIdx: -1 }
   const bestTimed4 = filled.length === 4 ? bestTimedIndex(vals) : -1
 
-  const ao5Beats = ao5 !== null && ao5 !== Infinity && target !== null && ao5 <= target
+  const ao5Beats = ao5 !== null && ao5 !== Infinity && target !== null && Math.round(ao5) <= target
   const ao5IsDnf = ao5 === Infinity
 
   const updateAttempt = (i, val) => {
@@ -329,7 +329,7 @@ export default function App() {
             <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: '10px', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '4px' }}>Ao5</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div style={{ color: '#fff', fontSize: '28px', fontWeight: 700, lineHeight: 1 }}>
-                {ao5 === null ? '—' : ao5IsDnf ? 'DNF' : fmtCs(ao5)}
+                {ao5 === null ? '—' : ao5IsDnf ? 'DNF' : fmtCs(Math.round(ao5))}
               </div>
               {ao5Beats && <div style={{ background: '#43a047', color: '#fff', fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '5px', letterSpacing: '0.05em' }}>TARGET</div>}
             </div>
