@@ -100,9 +100,17 @@ function calcMinReq(vals, target) {
   const timed = timedOnly(filled)
   if (timed.length < 2) return { val: 'IMPOSSIBLE', msg: '' }
 
-  // X in middle: drop timed[0] as best (DNF already worst), avg(X + timed[1] + timed[2]) <= target
+  // X must land in middle: slower than timed[0] (best) but faster than worst
+  // drop timed[0] as best, drop DNF/worst, avg(X + timed[1] + timed[2]) / 3 <= target
+  // → X <= 3*target - timed[1] - timed[2]
+  // Also X must be > timed[0], otherwise X gets dropped as best instead → use BPA, already checked
   const need = Math.round(3 * target - timed[1] - timed[2])
-  if (need > 0) return { val: need, msg: '' }
+  const dnfs = countDnf(filled)
+  const worst = dnfs > 0 ? Infinity : timed[timed.length - 1]
+
+  // need must be > timed[0] (if not, X would be dropped as best → that is BPA case, already IMPOSSIBLE)
+  // need must be < worst (if X >= worst, X gets dropped as worst → avg = timed[0]+timed[1]+timed[2] = BPA, already checked)
+  if (need > timed[0] && (dnfs > 0 || need < worst)) return { val: need, msg: '' }
 
   return { val: 'IMPOSSIBLE', msg: '' }
 }
@@ -244,7 +252,7 @@ export default function App() {
           <div style={labelStyle}>Target</div>
           <input type="text" value={targetRaw} onChange={e => setTargetRaw(e.target.value)} placeholder={PLACEHOLDER} style={inputStyle} />
           {targetParsed.warning && <div style={warnStyle}>{targetParsed.warning}</div>}
-          {target && <div style={hintStyle}>= {fmtCs(target)}</div>}
+
         </div>
 
         {/* Progress bar */}
@@ -295,9 +303,7 @@ export default function App() {
                   {isDnf && <Tag color="#fff" bg="#c62828">DNF</Tag>}
                 </div>
                 {p.warning && <div style={warnStyle}>{p.warning}</div>}
-                {p.value && p.value !== Infinity && !p.warning && (
-                  <div style={hintStyle}>= {fmtCs(p.value)}</div>
-                )}
+
               </div>
             )
           })}
