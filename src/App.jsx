@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 // ── Formatting ───────────────────────────────────────────────────────────────
 
+// cs is always REAL centiseconds (6000cs = 1 min)
 function fmtCs(cs) {
   if (cs === null) return '—'
   if (cs === Infinity) return 'DNF'
@@ -18,6 +19,19 @@ function fmtCs(cs) {
 
 // ── Input parsing ────────────────────────────────────────────────────────────
 
+// Convert user notation to REAL centiseconds:
+// < 6000  → raw cs (178 = 1.78s)
+// >= 10000 → MSSCS notation: 10067 → 1:00.67 → 6067cs, 11523 → 1:15.23 → 7523cs
+// 6000–9999 → invalid, warn
+function notationToCs(n) {
+  if (n < 6000) return n
+  const str = String(Math.round(n)).padStart(5, '0')
+  const cents = parseInt(str.slice(-2), 10)
+  const secs = parseInt(str.slice(-4, -2), 10)
+  const mins = parseInt(str.slice(0, -4), 10)
+  return mins * 6000 + secs * 100 + cents
+}
+
 function parseInput(raw) {
   const s = raw.trim()
   if (s === '') return { value: null, isDnf: false, warning: null }
@@ -25,11 +39,10 @@ function parseInput(raw) {
   const n = parseFloat(s)
   if (isNaN(n) || n <= 0) return { value: null, isDnf: false, warning: null }
   if (n >= 6000 && n <= 9999) {
-    const under = Math.round(n - (n - 5999))
-    const over = 10000 + Math.round(n - 6000)
-    return { value: null, isDnf: false, warning: `Invalid range — enter 5999 or below, or 10000 or above. Did you mean ${over}?` }
+    return { value: null, isDnf: false, warning: 'Invalid — for times over 1 min use 5-digit notation e.g. "10067" for 1:00.67' }
   }
-  return { value: n, isDnf: false, warning: null }
+  const realCs = notationToCs(n)
+  return { value: realCs, isDnf: false, warning: null }
 }
 
 // ── Calculation helpers ──────────────────────────────────────────────────────
@@ -210,19 +223,25 @@ export default function App() {
   }
 
   return (
-    <div style={{ fontFamily: "'Inter', sans-serif", background: '#e0f2f1', minHeight: '100vh', padding: '0 0 40px' }}>
+    <div style={{ fontFamily: "'Inter', sans-serif", background: '#fff', minHeight: '100vh', padding: '0 0 40px' }}>
 
       {/* Header */}
-      <div style={{ background: '#00695c', padding: '14px 20px', marginBottom: '16px' }}>
-        <div style={{ color: '#fff', fontSize: '18px', fontWeight: 700 }}>Ao5 Calculator</div>
-        <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '10px', letterSpacing: '0.1em', marginTop: '2px' }}>WCA LIVE · SPECTATOR MODE</div>
+      <div style={{ background: '#00695c', padding: '14px 20px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ color: '#fff', fontSize: '18px', fontWeight: 700 }}>Ao5 Calculator</div>
+          <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '10px', letterSpacing: '0.1em', marginTop: '2px' }}>WCA LIVE · SPECTATOR MODE</div>
+        </div>
+        <a href="https://www.worldcubeassociation.org" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '6px', textDecoration: 'none', background: 'rgba(255,255,255,0.15)', borderRadius: '8px', padding: '6px 10px' }}>
+          <img src="https://assets.worldcubeassociation.org/assets/0e752e6/assets/WCA Logo-4ef000323c6a9a407cdf07647a31c0ef4dc847f2352a9a136ef3e809e95bdeab.svg" alt="WCA" style={{ height: '28px', width: 'auto' }} onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='block' }} />
+          <span style={{ display: 'none', color: '#fff', fontSize: '11px', fontWeight: 700 }}>WCA</span>
+        </a>
       </div>
 
       <div style={{ maxWidth: '460px', margin: '0 auto', padding: '0 16px' }}>
 
         {/* Target */}
         <div style={{ marginBottom: '8px' }}>
-          <div style={labelStyle}>NR / PR / Target</div>
+          <div style={labelStyle}>Target</div>
           <input type="text" value={targetRaw} onChange={e => setTargetRaw(e.target.value)} placeholder={PLACEHOLDER} style={inputStyle} />
           {targetParsed.warning && <div style={warnStyle}>{targetParsed.warning}</div>}
           {target && <div style={hintStyle}>= {fmtCs(target)}</div>}
