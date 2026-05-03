@@ -35,11 +35,19 @@ function notationToCs(n) {
 function parseInput(raw) {
   const s = raw.trim()
   if (s === '') return { value: null, isDnf: false, warning: null }
-  if (s.toUpperCase().startsWith('D')) return { value: Infinity, isDnf: true, warning: null }
+  if (s.toUpperCase().startsWith('D') || s.startsWith('.')) return { value: Infinity, isDnf: true, warning: null }
   const n = parseFloat(s)
   if (isNaN(n) || n <= 0) return { value: null, isDnf: false, warning: null }
   if (n >= 6000 && n <= 9999) {
     return { value: null, isDnf: false, warning: 'Invalid — for times over 1 min use 5-digit notation e.g. "10067" for 1:00.67' }
+  }
+  // Validate MM:SS.CS notation — seconds must be 00-59
+  if (n >= 10000) {
+    const str = String(Math.round(n)).padStart(5, '0')
+    const secs = parseInt(str.slice(-4, -2), 10)
+    if (secs >= 60) {
+      return { value: null, isDnf: false, warning: `Invalid — seconds must be 00–59. e.g. "10593" for 1:05.93` }
+    }
   }
   const realCs = notationToCs(n)
   return { value: realCs, isDnf: false, warning: null }
@@ -107,7 +115,7 @@ function calcMinReq(vals, target) {
   const dnfs = countDnf(filled)
   const timed = timedOnly(filled)
   if (bpa !== Infinity && bpa !== null && Math.round(bpa) <= target) {
-    // Check worst case within "guaranteed": solve 5 = timed[3] (tied worst)
+    // Check true worst case: solve 5 tied with timed[3] (current worst)
     // Sort: timed[0], timed[1], timed[2], timed[3], timed[3] → drop timed[0], drop one timed[3]
     // Ao5 = (timed[1] + timed[2] + timed[3]) / 3
     const worstCase = (timed[1] + timed[2] + timed[3]) / 3
@@ -119,7 +127,11 @@ function calcMinReq(vals, target) {
 
   // X must land in middle: drop timed[0] as best, drop worst/DNF
   // avg(X + timed[1] + timed[2]) / 3 <= target → X <= 3*target - timed[1] - timed[2]
-  const need = Math.round(3 * target - timed[1] - timed[2])
+  // Find max X such that Math.round((X + timed[1] + timed[2]) / 3) <= target
+  // i.e. (X + timed[1] + timed[2]) / 3 < target + 0.5
+  // i.e. X < 3 * (target + 0.5) - timed[1] - timed[2]
+  // so max X = floor(3 * (target + 0.5) - timed[1] - timed[2] - epsilon)
+  const need = Math.ceil(3 * (target + 0.5) - timed[1] - timed[2]) - 1
   const worst = dnfs > 0 ? Infinity : timed[timed.length - 1]
 
   // need must be > timed[0] (if not, X would be dropped as best → that is BPA case, already IMPOSSIBLE)
@@ -209,7 +221,7 @@ function ResultBox({ label, sublabel, children }) {
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-const PLACEHOLDER = '"178" for 1.78s, "10067" for 1:00.67 or "D" for DNF'
+const PLACEHOLDER = '"178" for 1.78s, "10067" for 1:00.67 or "D" / "." for DNF'
 
 export default function App() {
   const [attempts, setAttempts] = useState(['', '', '', '', ''])
@@ -264,7 +276,7 @@ export default function App() {
         {/* Target */}
         <div style={{ marginBottom: '8px' }}>
           <div style={labelStyle}>Target</div>
-          <input type="text" value={targetRaw} onChange={e => setTargetRaw(e.target.value)} placeholder={PLACEHOLDER} style={inputStyle} />
+          <input type="text" inputMode="decimal" value={targetRaw} onChange={e => setTargetRaw(e.target.value)} placeholder={PLACEHOLDER} style={inputStyle} />
           {targetParsed.warning && <div style={warnStyle}>{targetParsed.warning}</div>}
 
         </div>
@@ -306,6 +318,7 @@ export default function App() {
                   <span style={{ fontSize: '10px', color: numColor, width: '14px', flexShrink: 0, fontWeight: 600 }}>{i + 1}</span>
                   <input
                     type="text"
+                    inputMode="decimal"
                     value={raw}
                     onChange={e => updateAttempt(i, e.target.value)}
                     placeholder={isPending ? '—' : PLACEHOLDER}
