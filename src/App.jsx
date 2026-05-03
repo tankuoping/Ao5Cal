@@ -92,20 +92,34 @@ function calcMinReq(vals, target) {
   const bpa = calcBPA(vals)
   const wpa = calcWPA(vals)
 
-  if (bpa !== Infinity && bpa !== null && bpa <= target)
-    return { val: 'guaranteed', msg: `BPA ${fmtCs(Math.round(bpa))} already beats target` }
+  // "Any time works" = even DNF on solve 5 (WPA) still beats target
   if (wpa !== Infinity && wpa !== null && wpa <= target)
-    return { val: 'anytime', msg: `Even worst case (WPA ${fmtCs(Math.round(wpa))}) beats target` }
+    return { val: 'anytime', msg: `Even a DNF on solve 5 beats target` }
 
+  // "Already guaranteed" = even if solve 5 is the new worst (just above current worst),
+  // Ao5 still beats target. This means avg(timed[0]+timed[1]+timed[2])/3 = BPA <= target
+  // AND we need solve 5 to be droppable as worst, so solve 5 must be >= timed[3].
+  // For any solve 5 >= timed[3]: dropped as worst, Ao5 = BPA <= target ✅
+  // For any solve 5 < timed[3]: lands in middle or best → Ao5 even better ✅
+  // So BPA <= target truly means guaranteed for ALL possible solve 5 values!
+  // Edge case: if solve 5 = timed[3] exactly, both are tied for worst → one dropped, other in middle
+  // → avg(timed[0]+timed[1]+timed[3])/3 which could be > BPA. So need to check this too.
+  const dnfs = countDnf(filled)
   const timed = timedOnly(filled)
+  if (bpa !== Infinity && bpa !== null && bpa <= target) {
+    // Check worst case within "guaranteed": solve 5 = timed[3] (tied worst)
+    // Sort: timed[0], timed[1], timed[2], timed[3], timed[3] → drop timed[0], drop one timed[3]
+    // Ao5 = (timed[1] + timed[2] + timed[3]) / 3
+    const worstCase = (timed[1] + timed[2] + timed[3]) / 3
+    if (worstCase <= target)
+      return { val: 'guaranteed', msg: `Target met regardless of solve 5` }
+  }
+
   if (timed.length < 2) return { val: 'IMPOSSIBLE', msg: '' }
 
-  // X must land in middle: slower than timed[0] (best) but faster than worst
-  // drop timed[0] as best, drop DNF/worst, avg(X + timed[1] + timed[2]) / 3 <= target
-  // → X <= 3*target - timed[1] - timed[2]
-  // Also X must be > timed[0], otherwise X gets dropped as best instead → use BPA, already checked
+  // X must land in middle: drop timed[0] as best, drop worst/DNF
+  // avg(X + timed[1] + timed[2]) / 3 <= target → X <= 3*target - timed[1] - timed[2]
   const need = Math.round(3 * target - timed[1] - timed[2])
-  const dnfs = countDnf(filled)
   const worst = dnfs > 0 ? Infinity : timed[timed.length - 1]
 
   // need must be > timed[0] (if not, X would be dropped as best → that is BPA case, already IMPOSSIBLE)
