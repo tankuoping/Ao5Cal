@@ -295,7 +295,7 @@ export default function App() {
             />
           </div>
           {targetParsed.warning && <div style={warnStyle}>{targetParsed.warning}</div>}
-          {target && <div style={{ fontSize: '11px', color: '#00695c', marginTop: '2px', paddingLeft: '4px' }}>= {fmtCs(target)}</div>}
+
         </div>
 
         {/* Progress bar */}

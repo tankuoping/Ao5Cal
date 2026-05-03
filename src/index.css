@@ -11,3 +11,10 @@ body {
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type=number] { -moz-appearance: textfield; }
+
+/* Smaller placeholder text for target input */
+input::placeholder {
+  font-size: 10px !important;
+  font-weight: 400 !important;
+  color: #a0c8c4 !important;
+}
