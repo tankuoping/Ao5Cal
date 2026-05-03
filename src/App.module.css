@@ -1,0 +1,265 @@
+.wrap {
+  max-width: 460px;
+  margin: 0 auto;
+  padding: 20px 16px 40px;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 22px;
+}
+
+.header h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--acc);
+  letter-spacing: -0.5px;
+}
+
+.header p {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 3px;
+  letter-spacing: 0.1em;
+}
+
+.card {
+  background: var(--surf);
+  border: 1px solid var(--bdr);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 10px;
+}
+
+.cardLabel {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.nrRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nrRow label {
+  font-size: 12px;
+  color: var(--text2);
+  white-space: nowrap;
+}
+
+.nrRow input {
+  flex: 1;
+  background: var(--surf2);
+  border: 1px solid var(--bdr);
+  border-radius: 8px;
+  color: var(--acc);
+  font-family: 'DM Mono', monospace;
+  font-size: 15px;
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.nrRow input:focus {
+  border-color: var(--acc);
+}
+
+.progressBar {
+  height: 3px;
+  background: var(--surf2);
+  border-radius: 2px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--acc);
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+
+.attemptsGrid {
+  display: grid;
+  gap: 7px;
+}
+
+.attemptRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surf2);
+  border: 1px solid var(--bdr);
+  border-radius: 10px;
+  padding: 9px 12px;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.attemptRow:focus-within {
+  border-color: var(--acc);
+}
+
+.attemptRow.dropped {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.04);
+}
+
+.attemptRow.pending {
+  border-color: rgba(74, 222, 128, 0.08);
+  opacity: 0.45;
+}
+
+.attemptNum {
+  font-size: 11px;
+  color: var(--muted);
+  width: 18px;
+  flex-shrink: 0;
+}
+
+.attemptRow input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  font-size: 16px;
+  outline: none;
+  min-width: 0;
+}
+
+.attemptRow input::placeholder {
+  color: var(--muted);
+}
+
+.attemptTag {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.tagBest {
+  background: rgba(74, 222, 128, 0.12);
+  color: var(--acc);
+}
+
+.tagWorst {
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--danger);
+}
+
+.results {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.resultBox {
+  background: var(--surf);
+  border: 1px solid var(--bdr);
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+}
+
+.resultBox.main {
+  grid-column: 1 / -1;
+  border-color: rgba(74, 222, 128, 0.3);
+}
+
+.rLabel {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+
+.sub {
+  font-size: 9px;
+  opacity: 0.6;
+}
+
+.rVal {
+  font-family: 'Syne', sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--acc);
+}
+
+.rValLarge {
+  font-size: 34px;
+}
+
+.muted { color: var(--muted); }
+.nrBeat { color: var(--gold); }
+.gold { color: var(--gold); }
+.guaranteed { color: var(--acc); }
+
+.impossible {
+  color: var(--danger);
+  font-size: 15px;
+  font-family: 'DM Mono', monospace;
+  font-weight: 400;
+}
+
+.minReqBox {
+  background: var(--surf);
+  border: 1px solid var(--bdr);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 10px;
+}
+
+.minReqInner {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.minReqInner .rVal {
+  font-size: 28px;
+}
+
+.rSub {
+  font-size: 11px;
+  color: var(--text2);
+}
+
+.btnClear {
+  width: 100%;
+  padding: 13px;
+  background: var(--surf2);
+  border: 1px solid var(--bdr);
+  border-radius: 12px;
+  color: var(--text2);
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btnClear:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(248, 113, 113, 0.05);
+}
+
+.footer {
+  text-align: center;
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 20px;
+  letter-spacing: 0.05em;
+}
